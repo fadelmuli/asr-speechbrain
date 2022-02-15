@@ -367,14 +367,26 @@ if __name__ == "__main__":
     )
 
     # Defining tokenizer and loading it
-    tokenizer = SentencePiece(
-        model_dir=hparams["save_folder"],
-        vocab_size=hparams["output_neurons"],
-        annotation_train=hparams["train_csv"],
-        annotation_read="wrd",
-        model_type=hparams["token_type"],
-        character_coverage=hparams["character_coverage"],
-    )
+    if hparams["bos_index"] != hparams["blank_index"]:
+        tokenizer = SentencePiece(
+            model_dir=hparams["save_folder"],
+            vocab_size=hparams["output_neurons"],
+            annotation_train=hparams["train_csv"],
+            annotation_read="wrd",
+            model_type=hparams["token_type"],
+            character_coverage=hparams["character_coverage"],
+            bos_id=hparams["bos_index"],
+            eos_id=hparams["eos_index"],
+        )
+    else:
+        tokenizer = SentencePiece(
+            model_dir=hparams["save_folder"],
+            vocab_size=hparams["output_neurons"],
+            annotation_train=hparams["train_csv"],
+            annotation_read="wrd",
+            model_type=hparams["token_type"],
+            character_coverage=hparams["character_coverage"],
+        )
 
     # Create the datasets objects as well as tokenization and encoding :-D
     train_data, valid_data, test_data = dataio_prepare(hparams, tokenizer)
