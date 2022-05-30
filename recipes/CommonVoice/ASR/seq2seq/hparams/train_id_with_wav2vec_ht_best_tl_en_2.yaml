@@ -8,7 +8,7 @@
 # Seed needs to be set at top of yaml, before objects with parameters are made
 seed: 1234
 __set_seed: !!python/object/apply:torch.manual_seed [!ref <seed>]
-output_folder: !ref results/wav2vec2_ctcatt_id_best/<seed>
+output_folder: !ref results/wav2vec2_ctcatt_id_best_tl_en_2/<seed>
 wer_file: !ref <output_folder>/wer.txt
 save_folder: !ref <output_folder>/save
 train_log: !ref <output_folder>/train_log.txt
@@ -19,6 +19,8 @@ pretrained_tokenizer_folder: False
 # URL for the biggest Fairseq english wav2vec2 model.
 # wav2vec2_hub: facebook/wav2vec2-large-100k-voxpopuli
 wav2vec2_hub: facebook/wav2vec2-large-xlsr-53
+pretrained_model: speechbrain/asr-wav2vec2-commonvoice-en
+pretrained_model_savedir: pretrained_models/asr-wav2vec2-commonvoice-en
 
 # Data files
 data_folder: !PLACEHOLDER  # e.g, /localscratch/cv-corpus-6.1-2020-12-11/it
@@ -62,7 +64,7 @@ test_dataloader_options:
     num_workers: 2
 
 # BPE parameters
-token_type: char  # ["unigram", "bpe", "char"]
+token_type: unigram  # ["unigram", "bpe", "char"]
 character_coverage: 1.0
 
 # Model parameters
@@ -76,7 +78,7 @@ freeze_wav2vec: False
 dropout: 0.15
 
 # Outputs
-output_neurons: 29  # BPE size, index(blank/eos/bos) = 0
+output_neurons: 1000  # BPE size, index(blank/eos/bos) = 0
 
 # Decoding parameters
 # Be sure that the bos and eos index match with the BPEs ones
@@ -89,9 +91,9 @@ beam_size: 10
 eos_threshold: 1.5
 using_max_attn_shift: True
 max_attn_shift: 140
-ctc_weight_decode: 0.2
+ctc_weight_decode: 0.0
 temperature: 1.50
-ctc_score_mode: partial
+ctc_score_mode: full
 
 #
 # Functions and classes
@@ -130,6 +132,7 @@ wav2vec2: !new:speechbrain.lobes.models.huggingface_wav2vec.HuggingFaceWav2Vec2
     output_norm: True
     freeze: !ref <freeze_wav2vec>
     save_path: !ref <model_dir>/wav2vec2_checkpoint
+    update_config: True
 
 #####
 # Uncomment this block if you prefer to use a Fairseq pretrained model instead
@@ -144,23 +147,23 @@ wav2vec2: !new:speechbrain.lobes.models.huggingface_wav2vec.HuggingFaceWav2Vec2
 #    save_path: !ref <save_folder>/wav2vec2_checkpoint/model.pt
 ####
 
-emb: !new:speechbrain.nnet.embedding.Embedding
-    num_embeddings: !ref <output_neurons>
-    embedding_dim: !ref <emb_size>
+# emb: !new:speechbrain.nnet.embedding.Embedding
+#     num_embeddings: !ref <output_neurons>
+#     embedding_dim: !ref <emb_size>
 
-dec: !new:speechbrain.nnet.RNN.AttentionalRNNDecoder
-    enc_dim: !ref <dnn_neurons>
-    input_size: !ref <emb_size>
-    rnn_type: gru
-    attn_type: location
-    hidden_size: 1024
-    attn_dim: 1024
-    num_layers: 1
-    scaling: 1.0
-    channels: 10
-    kernel_size: 100
-    re_init: True
-    dropout: 0.15
+# dec: !new:speechbrain.nnet.RNN.AttentionalRNNDecoder
+#     enc_dim: !ref <dnn_neurons>
+#     input_size: !ref <emb_size>
+#     rnn_type: gru
+#     attn_type: location
+#     hidden_size: 1024
+#     attn_dim: 1024
+#     num_layers: 1
+#     scaling: 1.0
+#     channels: 10
+#     kernel_size: 100
+#     re_init: True
+#     dropout: 0.15
 
 ctc_lin: !new:speechbrain.nnet.linear.Linear
     input_size: !ref <dnn_neurons>
@@ -179,16 +182,16 @@ ctc_cost: !name:speechbrain.nnet.losses.ctc_loss
 seq_cost: !name:speechbrain.nnet.losses.nll_loss
     label_smoothing: 0.1
 
-modules:
-    wav2vec2: !ref <wav2vec2>
-    enc: !ref <enc>
-    emb: !ref <emb>
-    dec: !ref <dec>
-    ctc_lin: !ref <ctc_lin>
-    seq_lin: !ref <seq_lin>
+# modules:
+#     wav2vec2: !ref <wav2vec2>
+#     enc: !ref <enc>
+#     emb: !ref <emb>
+#     dec: !ref <dec>
+#     ctc_lin: !ref <ctc_lin>
+#     seq_lin: !ref <seq_lin>
 
-model: !new:torch.nn.ModuleList
-    - [!ref <enc>, !ref <emb>, !ref <dec>, !ref <ctc_lin>, !ref <seq_lin>]
+# model: !new:torch.nn.ModuleList
+#     - [!ref <enc>, !ref <emb>, !ref <dec>, !ref <ctc_lin>, !ref <seq_lin>]
 
 model_opt_class: !name:torch.optim.Adadelta
     lr: !ref <lr>
@@ -209,33 +212,33 @@ lr_annealing_wav2vec: !new:speechbrain.nnet.schedulers.NewBobScheduler
     improvement_threshold: 0.0025
     annealing_factor: 0.9
     patient: 0
+    
+# beam_searcher: !new:speechbrain.decoders.S2SRNNBeamSearcher
+#     embedding: !ref <emb>
+#     decoder: !ref <dec>
+#     linear: !ref <seq_lin>
+#     ctc_linear: !ref <ctc_lin>
+#     bos_index: !ref <bos_index>
+#     eos_index: !ref <eos_index>
+#     blank_index: !ref <blank_index>
+#     min_decode_ratio: !ref <min_decode_ratio>
+#     max_decode_ratio: !ref <max_decode_ratio>
+#     beam_size: !ref <beam_size>
+#     eos_threshold: !ref <eos_threshold>
+#     using_max_attn_shift: !ref <using_max_attn_shift>
+#     max_attn_shift: !ref <max_attn_shift>
+#     temperature: !ref <temperature>
+#     ctc_score_mode: !ref <ctc_score_mode>
+#     ctc_weight: !ref <ctc_weight_decode>
 
-beam_searcher: !new:speechbrain.decoders.S2SRNNBeamSearcher
-    embedding: !ref <emb>
-    decoder: !ref <dec>
-    linear: !ref <seq_lin>
-    ctc_linear: !ref <ctc_lin>
-    bos_index: !ref <bos_index>
-    eos_index: !ref <eos_index>
-    blank_index: !ref <blank_index>
-    min_decode_ratio: !ref <min_decode_ratio>
-    max_decode_ratio: !ref <max_decode_ratio>
-    beam_size: !ref <beam_size>
-    eos_threshold: !ref <eos_threshold>
-    using_max_attn_shift: !ref <using_max_attn_shift>
-    max_attn_shift: !ref <max_attn_shift>
-    temperature: !ref <temperature>
-    ctc_score_mode: !ref <ctc_score_mode>
-    ctc_weight: !ref <ctc_weight_decode>
-
-checkpointer: !new:speechbrain.utils.checkpoints.Checkpointer
-    checkpoints_dir: !ref <save_folder>
-    recoverables:
-        wav2vec2: !ref <wav2vec2>
-        model: !ref <model>
-        scheduler_model: !ref <lr_annealing_model>
-        scheduler_wav2vec: !ref <lr_annealing_wav2vec>
-        counter: !ref <epoch_counter>
+# checkpointer: !new:speechbrain.utils.checkpoints.Checkpointer
+#     checkpoints_dir: !ref <save_folder>
+#     recoverables:
+#         wav2vec2: !ref <wav2vec2>
+#         model: !ref <model>
+#         scheduler_model: !ref <lr_annealing_model>
+#         scheduler_wav2vec: !ref <lr_annealing_wav2vec>
+#         counter: !ref <epoch_counter>
 
 train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
     save_file: !ref <train_log>

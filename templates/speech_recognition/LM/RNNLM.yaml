@@ -28,7 +28,7 @@ train_logger: !new:speechbrain.utils.train_logger.FileTrainLogger
     save_file: !ref <train_log>
 
 # Tokenizer model (you must use the same tokenizer for LM and ASR training)
-tokenizer_file: ../Tokenizer/save/1000_unigram.model
+tokenizer_file: ../Tokenizer/save/29_char.model
 
 # Training parameters
 number_of_epochs: 20
@@ -54,7 +54,7 @@ rnn_size: 512 # dimension of hidden layers
 layers: 2 # number of hidden layers
 
 # Outputs
-output_neurons: 1000 # index(blank/eos/bos) = 0
+output_neurons: 29 # index(blank/eos/bos) = 0
 blank_index: 0
 bos_index: 0
 eos_index: 0
@@ -67,6 +67,7 @@ model: !new:templates.speech_recognition.LM.custom_model.CustomModel
     embedding_dim: !ref <emb_dim>
     rnn_size: !ref <rnn_size>
     layers: !ref <layers>
+    output_dim: !ref <output_neurons>
 
 
 # Cost function used for training the model

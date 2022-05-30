@@ -91,6 +91,7 @@ class HuggingFaceWav2Vec2(nn.Module):
         freeze=True,
         freeze_feature_extractor=False,
         apply_spec_augment=False,
+        update_config=False,
     ):
         super().__init__()
 
@@ -110,7 +111,7 @@ class HuggingFaceWav2Vec2(nn.Module):
 
         # Download and load the model
         self._from_pretrained(
-            source, config=config, model=model, save_path=save_path
+            source, config=config, model=model, save_path=save_path, update_config=update_config
         )
 
         # set apply_spec_augment
@@ -134,7 +135,7 @@ class HuggingFaceWav2Vec2(nn.Module):
             if self.freeze_feature_extractor:
                 self.model.feature_extractor._freeze_parameters()
 
-    def _from_pretrained(self, source, config, model, save_path):
+    def _from_pretrained(self, source, config, model, save_path, update_config):
         """This function manages the source checking and loading of the params.
         # 1. Is the model from HF or a local path
         # 2. Is the model pretrained with HF or SpeechBrain
@@ -144,6 +145,21 @@ class HuggingFaceWav2Vec2(nn.Module):
         is_sb, ckpt_file = self._check_model_source(source)
         if is_sb:
             config = config.from_pretrained(source, cache_dir=save_path)
+            
+            if update_config:
+                logger.warning(
+                    "Update config activated"
+                )
+                config.activation_dropout=0.055
+                config.attention_dropout=0.094
+                config.hidden_dropout=0.047
+                config.feat_proj_dropout=0.04
+                config.mask_time_prob=0.4
+                config.gradient_checkpointing=True
+                config.layerdrop=0.041
+                config.ctc_loss_reduction="mean"
+                config.ctc_zero_infinity=True
+            
             self.model = model(config)
             self.model.gradient_checkpointing_disable()  # Required by DDP
             # fetch the checkpoint file
@@ -153,7 +169,24 @@ class HuggingFaceWav2Vec2(nn.Module):
             # We transfer the parameters from the checkpoint.
             self._load_sb_pretrained_w2v2_parameters(ckpt_full_path)
         else:
-            self.model = model.from_pretrained(source, cache_dir=save_path)
+            if update_config:
+                logger.warning(
+                    "Update config activated"
+                )
+                self.model = model.from_pretrained(source,
+                                                   cache_dir=save_path,
+                                                   activation_dropout=0.055,
+                                                   attention_dropout=0.094,
+                                                   hidden_dropout=0.047,
+                                                   feat_proj_dropout=0.04,
+                                                   mask_time_prob=0.4,
+                                                   gradient_checkpointing=True,
+                                                   layerdrop=0.041,
+                                                   ctc_loss_reduction="mean",
+                                                   ctc_zero_infinity=True)
+            else:
+                self.model = model.from_pretrained(source,
+                                                   cache_dir=save_path)
 
     def _load_sb_pretrained_w2v2_parameters(self, path):
         """Loads the parameter of a w2v2 model pretrained with SpeechBrain and the

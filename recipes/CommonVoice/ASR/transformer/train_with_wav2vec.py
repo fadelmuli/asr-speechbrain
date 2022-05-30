@@ -44,37 +44,29 @@ class ASR(sb.core.Brain):
         """Forward computations from the waveform batches to the output probabilities."""
         batch = batch.to(self.device)
         wavs, wav_lens = batch.sig
-        wavs, wav_lens = wavs.to(self.device), wav_lens.to(self.device)
         tokens_bos, _ = batch.tokens_bos
-
-        # compute features
-        feats = self.hparams.compute_features(wavs)
-        current_epoch = self.hparams.epoch_counter.current
-        feats = self.hparams.normalize(feats, wav_lens, epoch=current_epoch)
+        wavs, wav_lens = wavs.to(self.device), wav_lens.to(self.device)
 
         # Augmentation
         if stage == sb.Stage.TRAIN:
             if hasattr(self.hparams, "augmentation"):
-                feats = self.hparams.augmentation(feats)
+                wavs = self.hparams.augmentation(wavs, wav_lens)
+        
+        # Forward pass
+        feats = self.modules.wav2vec2(wavs)
 
         # forward modules
-        src = self.modules.CNN(feats)
-        print('src: ', src.shape)
-        print('feats: ', feats.shape)
         enc_out, pred = self.modules.Transformer(
-            src, tokens_bos, wav_lens, pad_idx=self.hparams.pad_index
+            feats, tokens_bos, wav_lens, pad_idx=self.hparams.pad_index
         )
         
-        print('enc_out: ', enc_out.shape)
-        print('pred: ', pred.shape)
+        # output layer for seq2seq log-probabilities
+        pred = self.modules.seq_lin(pred)
+        p_seq = self.hparams.log_softmax(pred)
         
         # output layer for ctc log-probabilities
         logits = self.modules.ctc_lin(enc_out)
         p_ctc = self.hparams.log_softmax(logits)
-
-        # output layer for seq2seq log-probabilities
-        pred = self.modules.seq_lin(pred)
-        p_seq = self.hparams.log_softmax(pred)
 
         # Compute outputs
         hyps = None
@@ -133,26 +125,47 @@ class ASR(sb.core.Brain):
 
     def fit_batch(self, batch):
         """Train the parameters given a single batch in input"""
+        
+        if self.auto_mix_prec:
+            if not self.hparams.wav2vec2.freeze:
+                self.wav2vec_optimizer.zero_grad()
+            self.model_optimizer.zero_grad()
+            with torch.cuda.amp.autocast():
+                outputs = self.compute_forward(batch, sb.Stage.TRAIN)
+                loss = self.compute_objectives(outputs, batch, sb.Stage.TRAIN)
+            self.scaler.scale(loss).backward()
+            if not self.hparams.wav2vec2.freeze:
+                self.scaler.unscale_(self.wav2vec_optimizer)
+            self.scaler.unscale_(self.model_optimizer)
+            if self.check_gradients(loss):
+                if not self.hparams.wav2vec2.freeze:
+                    self.scaler.step(self.wav2vec_optimizer)
+                self.scaler.step(self.model_optimizer)
+            self.scaler.update()
+        else:
+            # check if we need to switch optimizer
+            # if so change the optimizer from Adam to SGD
+            self.check_and_reset_optimizer()
 
-        # check if we need to switch optimizer
-        # if so change the optimizer from Adam to SGD
-        self.check_and_reset_optimizer()
+            predictions = self.compute_forward(batch, sb.Stage.TRAIN)
+            loss = self.compute_objectives(predictions, batch, sb.Stage.TRAIN)
 
-        predictions = self.compute_forward(batch, sb.Stage.TRAIN)
-        loss = self.compute_objectives(predictions, batch, sb.Stage.TRAIN)
+            # normalize the loss by gradient_accumulation step
+            (loss / self.hparams.gradient_accumulation).backward()
 
-        # normalize the loss by gradient_accumulation step
-        (loss / self.hparams.gradient_accumulation).backward()
+            if self.step % self.hparams.gradient_accumulation == 0:
+                # gradient clipping & early stop if loss is not fini
+                if self.check_gradients(loss):
+                    if not self.hparams.wav2vec2.freeze:
+                        self.wav2vec_optimizer.step()
+                    self.model_optimizer.step()
+                    
+                if not self.hparams.wav2vec2.freeze:
+                    self.wav2vec_optimizer.zero_grad()
+                self.model_optimizer.zero_grad()
 
-        if self.step % self.hparams.gradient_accumulation == 0:
-            # gradient clipping & early stop if loss is not fini
-            self.check_gradients(loss)
-
-            self.optimizer.step()
-            self.optimizer.zero_grad()
-
-            # anneal lr every update
-            self.hparams.noam_annealing(self.optimizer)
+                # anneal lr every update
+                self.hparams.noam_annealing(self.model_optimizer)
 
         return loss.detach()
 

@@ -140,6 +140,11 @@ dmypy.json
 
 # Results folders
 **/results/
+**/models/
+**/pretrained_models/
+**/model_checkpoints/
+**/data/
+**/save/
 
 # Mac OS
 .DS_Store

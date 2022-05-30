@@ -16,8 +16,8 @@ valid_annotation: ../valid.json
 test_annotation: ../test.json
 
 # Tokenizer parameters
-token_type: unigram  # ["unigram", "bpe", "char"]
-token_output: 1000  # index(blank/eos/bos/unk) = 0
+token_type: char  # ["unigram", "bpe", "char"]
+token_output: 29  # index(blank/eos/bos/unk) = 0
 character_coverage: 1.0
 annotation_read: words # field to read
 

@@ -8,7 +8,7 @@
 # Seed needs to be set at top of yaml, before objects with parameters are made
 seed: 1234
 __set_seed: !!python/object/apply:torch.manual_seed [!ref <seed>]
-output_folder: !ref results/wav2vec2_ctcatt_id_best/<seed>
+output_folder: !ref results/wav2vec2_ctcatt_id_best_2/<seed>
 wer_file: !ref <output_folder>/wer.txt
 save_folder: !ref <output_folder>/save
 train_log: !ref <output_folder>/train_log.txt
@@ -130,6 +130,7 @@ wav2vec2: !new:speechbrain.lobes.models.huggingface_wav2vec.HuggingFaceWav2Vec2
     output_norm: True
     freeze: !ref <freeze_wav2vec>
     save_path: !ref <model_dir>/wav2vec2_checkpoint
+    update_config: True
 
 #####
 # Uncomment this block if you prefer to use a Fairseq pretrained model instead
@@ -161,6 +162,8 @@ dec: !new:speechbrain.nnet.RNN.AttentionalRNNDecoder
     kernel_size: 100
     re_init: True
     dropout: 0.15
+    ctc_weight: !ref <ctc_weight_decode>
+    ctc_score_mode: !ref <ctc_score_mode>
 
 ctc_lin: !new:speechbrain.nnet.linear.Linear
     input_size: !ref <dnn_neurons>
